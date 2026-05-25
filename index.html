@@ -3034,7 +3034,7 @@ function HomeEmpleado({ session, onLogout, onIniciarCierre }) {
 // ═══════════════════════════════════════════════════════════════════════════════════
 function HomeAdmin({ session, onLogout }) {
   const { useState:useS, useEffect:useE } = React;
-  const esMaestro = (session.rol||'').toLowerCase() === 'maestro';
+  const esMaestro = ['maestro','admin'].includes((session.rol||'').toLowerCase());
   const misSucs   = esMaestro ? SUCURSALES_ALL : (session.sucursalesAsignadas||[]);
 
   const [tab,      setTab]      = useS('dashboard');
@@ -3529,7 +3529,7 @@ function HomeAdmin({ session, onLogout }) {
       {/* Tabs */}
       <div className="admin-tabs">
         <button className={`admin-tab ${tab==='dashboard'?'active':''}`} onClick={()=>setTab('dashboard')}>📊 Dashboard</button>
-        {esMaestro && <button className={`admin-tab ${tab==='usuarios'?'active':''}`} onClick={()=>setTab('usuarios')}>👥 Usuarios</button>}
+        {(esMaestro || (session.rol||'').toLowerCase()==='admin') && <button className={`admin-tab ${tab==='usuarios'?'active':''}`} onClick={()=>setTab('usuarios')}>👥 Usuarios</button>}
       </div>
 
       {msgExito && <div className="msg msg-success" style={{margin:'12px 20px'}}>{msgExito}</div>}
