@@ -843,85 +843,77 @@ const { useState, useEffect } = React;
 // ═══════════════════════════════════════════════════════════════════════════════════
 // ██  CONFIGURACIÓN — CAMBIA ESTOS VALORES AL DESPLEGAR
 // ═══════════════════════════════════════════════════════════════════════════════════
-const SUPABASE_URL = 'https://vnzqdtskczopblbeuxcg.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_UU5V3xziRGygH0RBOwjGSg_UGiAVFQP';
-const APPS_SCRIPT_URL = '(supabase)';
-
-async function sbFetch(path, opts={}) {
-  const r = await fetch(SUPABASE_URL+path, {...opts, headers:{
-    'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,
-    'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})
-  }});
+const SUPABASE_URL='https://vnzqdtskczopblbeuxcg.supabase.co';
+const SUPABASE_KEY='sb_publishable_UU5V3xziRGygH0RBOwjGSg_UGiAVFQP';
+const APPS_SCRIPT_URL='(supabase)';
+async function sbFetch(path,opts){
+  opts=opts||{};
+  const r=await fetch(SUPABASE_URL+path,Object.assign({},opts,{headers:Object.assign({'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=representation'},opts.headers||{})}));
   if(!r.ok){const e=await r.text();throw new Error(e||'Error '+r.status);}
   return r.status===204?{}:r.json();
 }
-
-async function sbDispatch(action, p) {
-  switch(action){
-    case 'login':{
-      const rows=await sbFetch('/rest/v1/usuarios?usuario=eq.'+encodeURIComponent((p.u||'').toLowerCase().trim())+'&activo=eq.true&select=*');
-      if(!rows||rows.length===0) return {success:false,error:'Usuario o contraseña incorrectos.'};
-      if(rows[0].password!==(p.p||'').trim()) return {success:false,error:'Usuario o contraseña incorrectos.'};
-      return {success:true,sucursal:rows[0].sucursal,rol:rows[0].rol,token:btoa((p.u||'')+'|'+new Date().toDateString())};
-    }
-    case 'subirFoto':{
-      const b64=(p.base64||'').replace(/^data:image\/\w+;base64,/,'');
-      const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
-      const path=(p.sucursal||'').replace(/\s+/g,'_')+'/'+(p.mes||'')+'-'+(p.anio||'')+'/'+(p.fecha||'')+'_T'+(p.turno||'')+'/'+(p.nombreArchivo||'foto.jpg');
-      const up=await fetch(SUPABASE_URL+'/storage/v1/object/gf-evidencias/'+path,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'image/jpeg','x-upsert':'true'},body:bytes});
-      if(!up.ok) throw new Error('Error subiendo foto: '+up.status);
-      await sbFetch('/rest/v1/fotos',{method:'POST',body:JSON.stringify({sucursal:p.sucursal,turno:p.turno,fecha:p.fecha,empleado:p.nombre,nombre_archivo:p.nombreArchivo,storage_path:path})});
-      return {success:true};
-    }
-    case 'registrarCierre':{
-      const hora=new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
-      await sbFetch('/rest/v1/cierres',{method:'POST',body:JSON.stringify({fecha:p.fecha,hora,sucursal:p.sucursal,turno:String(p.turno),empleado:p.nombre,tarjeta:parseFloat(p.tarjeta)||0,efectivo:parseFloat(p.efectivo)||0,sueldos:parseFloat(p.sueldos)||0,gastos:parseFloat(p.gastos)||0,extras:parseFloat(p.extras)||0,faltante:parseFloat(p.faltante)||0,sobrante:parseFloat(p.sobrante)||0,pendiente:parseFloat(p.pendiente)||0,efectivo_neto:parseFloat(p.efectivoNeto)||0,evidencias:p.evidencias||'',bloqueado:true})});
-      return {success:true};
-    }
-    case 'getDashboard':{
-      const rows=await sbFetch('/rest/v1/cierres?fecha=eq.'+encodeURIComponent(p.fecha||'')+'&order=id.asc');
-      const arr=Array.isArray(rows)?rows:[];
-      const sucs=p.sucursales?p.sucursales.split(',').map(s=>s.trim()):null;
-      return {success:true,registros:(sucs?arr.filter(r=>sucs.includes(r.sucursal)):arr).map(r=>(({idx:r.id,...r,bloqueado:!!r.bloqueado}))),};
-    }
-    case 'getDashboardPeriodo':{
-      const rows=await sbFetch('/rest/v1/cierres?fecha=gte.'+encodeURIComponent(p.desde||'')+'&fecha=lte.'+encodeURIComponent(p.hasta||'')+'&order=id.asc');
-      const arr=Array.isArray(rows)?rows:[];
-      const sucs=p.sucursales?p.sucursales.split(',').map(s=>s.trim()):null;
-      return {success:true,registros:(sucs?arr.filter(r=>sucs.includes(r.sucursal)):arr).map(r=>(({idx:r.id,...r,bloqueado:!!r.bloqueado}))),};
-    }
-    case 'getUsers':{
-      const rows=await sbFetch('/rest/v1/usuarios?select=id,usuario,sucursal,rol,activo&order=id.asc');
-      return {success:true,users:(Array.isArray(rows)?rows:[]).map(u=>(({idx:u.id,...u}))),};
-    }
-    case 'saveUser':{
-      const ex=await sbFetch('/rest/v1/usuarios?usuario=eq.'+encodeURIComponent((p.usuario||'').toLowerCase()));
-      if(ex&&ex.length>0){await sbFetch('/rest/v1/usuarios?id=eq.'+ex[0].id,{method:'PATCH',body:JSON.stringify({password:p.password||p.contraseña,sucursal:p.sucursal,rol:p.rol,activo:true})});}
-      else{await sbFetch('/rest/v1/usuarios',{method:'POST',body:JSON.stringify({usuario:(p.usuario||'').toLowerCase(),password:p.password||p.contraseña,sucursal:p.sucursal,rol:p.rol||'empleado',activo:true})});}
-      return {success:true};
-    }
-    case 'toggleUser':{
-      await sbFetch('/rest/v1/usuarios?id=eq.'+p.idx,{method:'PATCH',body:JSON.stringify({activo:!p.activo})});
-      return {success:true,activo:!p.activo};
-    }
-    case 'desbloquear':{
-      await sbFetch('/rest/v1/cierres?sucursal=eq.'+encodeURIComponent(p.sucursal)+'&turno=eq.'+p.turno+'&fecha=eq.'+encodeURIComponent(p.fecha),{method:'PATCH',body:JSON.stringify({bloqueado:false})});
-      return {success:true};
-    }
-    case 'updateCierre':{
-      await sbFetch('/rest/v1/cierres?id=eq.'+p.idx,{method:'PATCH',body:JSON.stringify({tarjeta:parseFloat(p.tarjeta)||0,efectivo:parseFloat(p.efectivo)||0,sueldos:parseFloat(p.sueldos)||0,gastos:parseFloat(p.gastos)||0,extras:parseFloat(p.extras)||0,faltante:parseFloat(p.faltante)||0,sobrante:parseFloat(p.sobrante)||0,pendiente:parseFloat(p.pendiente)||0,efectivo_neto:parseFloat(p.efectivoNeto)||0})});
-      return {success:true};
-    }
-    case 'subirExcel': return {success:true};
-    default: throw new Error('Acción desconocida: '+action);
+async function sbDispatch(action,p){
+  if(action==='login'){
+    const rows=await sbFetch('/rest/v1/usuarios?usuario=eq.'+encodeURIComponent((p.u||'').toLowerCase().trim())+'&activo=eq.true&select=*');
+    if(!rows||rows.length===0)return{success:false,error:'Usuario o contraseña incorrectos.'};
+    if(rows[0].password!==(p.p||'').trim())return{success:false,error:'Usuario o contraseña incorrectos.'};
+    return{success:true,sucursal:rows[0].sucursal,rol:rows[0].rol,token:btoa((p.u||'')+'|'+new Date().toDateString())};
   }
+  if(action==='subirFoto'){
+    const b64=(p.base64||'').replace(/^data:image\/\w+;base64,/,'');
+    const bytes=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});
+    const path=(p.sucursal||'').replace(/\s+/g,'_')+'/'+(p.mes||'')+'-'+(p.anio||'')+'/'+(p.fecha||'')+'_T'+(p.turno||'')+'/'+(p.nombreArchivo||'foto.jpg');
+    const up=await fetch(SUPABASE_URL+'/storage/v1/object/gf-evidencias/'+path,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'image/jpeg','x-upsert':'true'},body:bytes});
+    if(!up.ok)throw new Error('Error subiendo foto: '+up.status);
+    await sbFetch('/rest/v1/fotos',{method:'POST',body:JSON.stringify({sucursal:p.sucursal,turno:p.turno,fecha:p.fecha,empleado:p.nombre,nombre_archivo:p.nombreArchivo,storage_path:path})});
+    return{success:true};
+  }
+  if(action==='registrarCierre'){
+    const hora=new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+    await sbFetch('/rest/v1/cierres',{method:'POST',body:JSON.stringify({fecha:p.fecha,hora:hora,sucursal:p.sucursal,turno:String(p.turno),empleado:p.nombre,tarjeta:parseFloat(p.tarjeta)||0,efectivo:parseFloat(p.efectivo)||0,sueldos:parseFloat(p.sueldos)||0,gastos:parseFloat(p.gastos)||0,extras:parseFloat(p.extras)||0,faltante:parseFloat(p.faltante)||0,sobrante:parseFloat(p.sobrante)||0,pendiente:parseFloat(p.pendiente)||0,efectivo_neto:parseFloat(p.efectivoNeto)||0,evidencias:p.evidencias||'',bloqueado:true})});
+    return{success:true};
+  }
+  if(action==='getDashboard'){
+    const rows=await sbFetch('/rest/v1/cierres?fecha=eq.'+encodeURIComponent(p.fecha||'')+'&order=id.asc');
+    const arr=Array.isArray(rows)?rows:[];
+    const sucs=p.sucursales?p.sucursales.split(',').map(function(s){return s.trim();}):null;
+    return{success:true,registros:(sucs?arr.filter(function(r){return sucs.includes(r.sucursal);}):arr).map(function(r){return Object.assign({idx:r.id},r,{bloqueado:!!r.bloqueado});})};
+  }
+  if(action==='getDashboardPeriodo'){
+    const rows=await sbFetch('/rest/v1/cierres?fecha=gte.'+encodeURIComponent(p.desde||'')+'&fecha=lte.'+encodeURIComponent(p.hasta||'')+'&order=id.asc');
+    const arr=Array.isArray(rows)?rows:[];
+    const sucs=p.sucursales?p.sucursales.split(',').map(function(s){return s.trim();}):null;
+    return{success:true,registros:(sucs?arr.filter(function(r){return sucs.includes(r.sucursal);}):arr).map(function(r){return Object.assign({idx:r.id},r,{bloqueado:!!r.bloqueado});})};
+  }
+  if(action==='getUsers'){
+    const rows=await sbFetch('/rest/v1/usuarios?select=id,usuario,sucursal,rol,activo&order=id.asc');
+    return{success:true,users:(Array.isArray(rows)?rows:[]).map(function(u){return Object.assign({idx:u.id},u);})};
+  }
+  if(action==='saveUser'){
+    const ex=await sbFetch('/rest/v1/usuarios?usuario=eq.'+encodeURIComponent((p.usuario||'').toLowerCase()));
+    if(ex&&ex.length>0){await sbFetch('/rest/v1/usuarios?id=eq.'+ex[0].id,{method:'PATCH',body:JSON.stringify({password:p.password||p.contraseña,sucursal:p.sucursal,rol:p.rol,activo:true})});}
+    else{await sbFetch('/rest/v1/usuarios',{method:'POST',body:JSON.stringify({usuario:(p.usuario||'').toLowerCase(),password:p.password||p.contraseña,sucursal:p.sucursal,rol:p.rol||'empleado',activo:true})});}
+    return{success:true};
+  }
+  if(action==='toggleUser'){
+    await sbFetch('/rest/v1/usuarios?id=eq.'+p.idx,{method:'PATCH',body:JSON.stringify({activo:!p.activo})});
+    return{success:true,activo:!p.activo};
+  }
+  if(action==='desbloquear'){
+    await sbFetch('/rest/v1/cierres?sucursal=eq.'+encodeURIComponent(p.sucursal)+'&turno=eq.'+p.turno+'&fecha=eq.'+encodeURIComponent(p.fecha),{method:'PATCH',body:JSON.stringify({bloqueado:false})});
+    return{success:true};
+  }
+  if(action==='updateCierre'){
+    await sbFetch('/rest/v1/cierres?id=eq.'+p.idx,{method:'PATCH',body:JSON.stringify({tarjeta:parseFloat(p.tarjeta)||0,efectivo:parseFloat(p.efectivo)||0,sueldos:parseFloat(p.sueldos)||0,gastos:parseFloat(p.gastos)||0,extras:parseFloat(p.extras)||0,faltante:parseFloat(p.faltante)||0,sobrante:parseFloat(p.sobrante)||0,pendiente:parseFloat(p.pendiente)||0,efectivo_neto:parseFloat(p.efectivoNeto)||0})});
+    return{success:true};
+  }
+  return{success:true};
 }
-
-function callScript(p)   { return sbDispatch(p.action,p); }
-function apiGet(p)       { return sbDispatch(p.action,p); }
-function apiPost(p)      { return sbDispatch(p.action,p); }
-function loginSeguro(p)  { return sbDispatch('login',p); }
-function subirFoto(payload) { return sbDispatch('subirFoto',payload); }
+function callScript(p){return sbDispatch(p.action,p);}
+function apiGet(p){return sbDispatch(p.action,p);}
+function apiPost(p){return sbDispatch(p.action,p);}
+function loginSeguro(p){return sbDispatch('login',p);}
+function subirFoto(payload){return sbDispatch('subirFoto',payload);}
 const SESSION_KEY     = 'gf_corte_v1';
 const AUTH_TOKEN_KEY  = 'gf_corte_auth_token';
 const APP_VERSION     = 'Fase 4 - v1.0';
@@ -949,7 +941,19 @@ const LOGOS = {
 // UTILIDADES
 // ═══════════════════════════════════════════════════════════════════════════════════
 
-// [red: funciones de red → Supabase]
+// [callScript->sb]
+
+function setAuthToken(token) {
+  if (token) sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+function getAuthToken() {
+  return sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
+}
+function clearAuthToken() {
+  sessionStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+// [jsonFetch/loginSeguro->sb]
 
 function getFechaLarga() {
   return new Date().toLocaleDateString('es-MX', {
@@ -1476,7 +1480,7 @@ async function subirExcelCorreccion(reg) {
 }
 
 
-// [red: apiGet/apiPost → Supabase]
+// [apiGet/apiPost->sb]
 
 
 function fechaHoy() {
@@ -1521,7 +1525,7 @@ function compressImage(file) {
   });
 }
 
-// [red: subirFoto → Supabase]
+// [subirFoto->sb]
 // ─── Clave de bloqueo local ───────────────────────────────────────────────────
 function claveBloqueo(sucursal, turno) {
   return `gf_cierre_${sucursal}_${getFechaArchivo()}_t${turno}`;
